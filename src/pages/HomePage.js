@@ -20,6 +20,7 @@ import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 
 import { useNavigate } from "react-router-dom";
 import { getServices } from "../api/serviceApi";
+import ServiceApiTest from "../ServiceApiTest";
 
 const serviceIcons = {
   inventory: Inventory2OutlinedIcon,
@@ -67,6 +68,7 @@ function HomePage() {
       <Typography color="text.secondary" sx={{ mb: 4 }}>
         Select a service to get started.
       </Typography>
+      <ServiceApiTest />
 
       {loading && (
         <Box

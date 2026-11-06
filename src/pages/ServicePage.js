@@ -29,6 +29,7 @@ function ServicePage({ mode }) {
   navigate,
   service,
   record,
+  attributeDefinitions,
   rows,
   filteredRows,
   loading,
@@ -53,6 +54,7 @@ function ServicePage({ mode }) {
   handleSave,
   closeNotification,
   backToList,
+  productSchema
 } = useServicePage(mode);
 // Show loading state while service data is being fetched
 if (loading) {
@@ -141,7 +143,13 @@ if (!service) {
         )}
 
         {activeTab === "attributes" && (
-          <ServiceAttributesTab record={record} />
+          <ServiceAttributesTab
+            record={record}
+            attributeDefinitions={attributeDefinitions}
+            isReadOnly={isReadOnly}
+            setRecord={setRecord}
+            productSchema={productSchema}
+          />
         )}
 
         {activeTab !== "overview" &&

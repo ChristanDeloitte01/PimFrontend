@@ -38,13 +38,21 @@ function ServiceFields({
         }
 
         if (field.type === "select") {
+          const fieldValue = record[field.name];
+
+          const normalizedValue = Array.isArray(fieldValue)
+            ? fieldValue.length > 0
+              ? fieldValue[0]
+              : ""
+            : fieldValue ?? "";
+
           return (
             <TextField
               key={field.name}
               select
               name={field.name}
               label={field.label}
-              value={record[field.name] ?? ""}
+              value={normalizedValue}
               onChange={onFieldChange}
               required={field.required}
               disabled={disabled}

@@ -1,12 +1,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-
-import apiClient from "../api/client";
-import { getServices } from "../api/serviceApi";
+import { extractListItems } from "../utils/serviceResponseHelpers";
+import {
+  getServices,
+  executeServiceOperation,
+} from "../api/serviceApi";
 
 import {
-  resolveEndpoint,
   getErrorMessage,
 } from "../utils/serviceHelpers";
 
@@ -16,6 +17,8 @@ import {
 } from "../utils/serviceFieldHelpers";
 
 import toProductUpdatePayload from "../utils/productupdatePayload";
+import normalizeProductRecord from "../utils/productRecordMapper";
+import { validateProductAttributes } from "../utils/attributeValidation";
 
 function useServicePage(mode) {
   const navigate = useNavigate();
@@ -27,7 +30,9 @@ function useServicePage(mode) {
 
   const [service, setService] = useState(null);
   const [record, setRecord] = useState({});
+  const [attributeDefinitions, setAttributeDefinitions] = useState([]);
   const [rows, setRows] = useState([]);
+  const [productSchema, setProductSchema] = useState(null);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -114,63 +119,135 @@ function useServicePage(mode) {
   // ------------------------------------
 
   const loadPage = useCallback(async () => {
-    setLoading(true);
-    setError("");
+  setLoading(true);
+  setError("");
 
-    try {
-      const services = await getServices();
+  try {
+    const services = await getServices();
 
-      const currentService = services.find(
-        (item) => item.id === serviceId
+    const currentService = services.find(
+      (item) => item.id === serviceId
+    );
+
+    if (!currentService) {
+      throw new Error(
+        `Service "${serviceId}" was not found.`
       );
-
-      if (!currentService) {
-        throw new Error(`Service "${serviceId}" was not found.`);
-      }
-
-      if (currentService.renderer !== "entity") {
-        throw new Error(
-          `The "${currentService.renderer}" renderer is not implemented yet.`
-        );
-      }
-
-      setService(currentService);
-
-      if (isList) {
-        const endpoint = resolveEndpoint(
-          currentService.endpoints?.list
-        );
-
-        const response = await apiClient.get(endpoint);
-
-        if (!Array.isArray(response.data)) {
-          throw new Error(
-            "The list endpoint must return a JSON array."
-          );
-        }
-
-        setRows(response.data);
-      } else if (isCreate) {
-        setRecord(makeEmptyRecord(currentService.fields));
-      } else {
-        const endpoint = resolveEndpoint(
-          currentService.endpoints?.detail,
-          id
-        );
-
-        const response = await apiClient.get(endpoint);
-        setRecord(response.data);
-      }
-    } catch (err) {
-      console.error("Unable to load service page:", err);
-
-      setError(
-        getErrorMessage(err, "Unable to load this service.")
-      );
-    } finally {
-      setLoading(false);
     }
-  }, [serviceId, id, isList, isCreate]);
+
+    if (currentService.renderer !== "entity") {
+      throw new Error(
+        `The "${currentService.renderer}" renderer is not implemented yet.`
+      );
+    }
+
+    setService(currentService);
+
+    /*
+     * Product attributes are owned by UnoPim.
+     *
+     * SQLite only provides service/UI configuration.
+     */
+    if (serviceId === "products") {
+      try {
+        const attributeResponse =
+          await executeServiceOperation(
+            "attributes",
+            "list",
+            {
+              query: {
+                page: 1,
+                limit: 50,
+                includeOptions: true,
+              },
+            }
+          );
+
+        const definitions =
+          Array.isArray(attributeResponse)
+            ? attributeResponse
+            : attributeResponse?.items ||
+              attributeResponse?.data ||
+              [];
+
+        setAttributeDefinitions(
+          definitions
+        );
+      } catch (attributeError) {
+        console.error(
+          "Unable to load product attributes:",
+          attributeError
+        );
+
+        /*
+         * Don't prevent the product page from
+         * loading if attribute metadata fails.
+         */
+        setAttributeDefinitions([]);
+      }
+    } else {
+      setAttributeDefinitions([]);
+    }
+
+    if (isList) {
+  const response = await executeServiceOperation(
+    serviceId,
+    "list"
+  );
+
+  setRows(extractListItems(response));
+} else if (isCreate) {
+  setRecord(makeEmptyRecord(currentService.fields));
+} else {
+  const response = await executeServiceOperation(
+          serviceId,
+          "detail",
+          {
+            params: { id },
+          }
+        );
+
+        setRecord(
+          serviceId === "products"
+            ? normalizeProductRecord(response)
+            : response
+        );
+
+        if (serviceId === "products") {
+            const schemaResponse = await executeServiceOperation(
+              "products",
+              "schema",
+              {
+                query: {
+                  family: response.family || "default",
+                },
+              }
+            );
+            setProductSchema(schemaResponse);
+            console.log("PRODUCT SCHEMA:", schemaResponse);
+          }
+    }
+  } catch (err) {
+    console.error(
+      "Unable to load service page:",
+      err
+    );
+
+    setError(
+      getErrorMessage(
+        err,
+        "Unable to load this service."
+      )
+    );
+  } finally {
+    setLoading(false);
+  }
+}, [
+  serviceId,
+  id,
+  isList,
+  isCreate,
+]);
 
   useEffect(() => {
     loadPage();
@@ -199,74 +276,122 @@ function useServicePage(mode) {
   // ------------------------------------
 
   const handleSave = useCallback(async (event) => {
-    event.preventDefault();
-    setSaving(true);
+      event.preventDefault();
 
-    try {
-      const payload =
-        serviceId === "products"
-          ? toProductUpdatePayload(record)
-          : record;
+      if (serviceId === "products") {
+        const validationErrors =
+          validateProductAttributes(
+            record,
+            productSchema
+          );
 
-      let response;
+        if (
+          Object.keys(validationErrors).length > 0
+        ) {
+          console.error(
+            "Product validation errors:",
+            validationErrors
+          );
 
-      if (isCreate) {
-        const endpoint = resolveEndpoint(
-          service.endpoints?.create
-        );
+          const firstError =
+            Object.entries(validationErrors)[0];
 
-        response = await apiClient.post(endpoint, payload);
-      } else {
-        const endpoint = resolveEndpoint(
-          service.endpoints?.update,
-          id
-        );
+          showNotification(
+            "error",
+            firstError
+              ? `${firstError[0]}: ${firstError[1]}`
+              : "Please correct the invalid product attributes before saving."
+          );
 
-        response = await apiClient.put(endpoint, payload);
+          return;
+        }
       }
 
-      const savedRecord = response.data;
+      setSaving(true);
 
-      showNotification(
-        "success",
-        isCreate
-          ? `${service.title} created successfully.`
-          : `${service.title} saved successfully.`
-      );
+      try {
+        const payload =
+          serviceId === "products"
+            ? toProductUpdatePayload(
+                record,
+                productSchema
+              )
+            : record;
 
-      if (isCreate && savedRecord?.id !== undefined) {
-        navigate(
-          `/services/${serviceId}/${encodeURIComponent(savedRecord.id)}`
-        );
-      } else if (isCreate) {
-        navigate(`/services/${serviceId}`);
-      } else {
-        navigate(`/services/${serviceId}/${id}`);
-      }
-    } catch (err) {
-      console.error("Unable to save record:", err);
+        let savedRecord;
 
-      showNotification(
-        "error",
-        getErrorMessage(
-          err,
+        if (isCreate) {
+          savedRecord =
+            await executeServiceOperation(
+              serviceId,
+              "create",
+              {
+                data: payload,
+              }
+            );
+        } else {
+          savedRecord =
+            await executeServiceOperation(
+              serviceId,
+              "update",
+              {
+                params: { id },
+                data: payload,
+              }
+            );
+        }
+
+        showNotification(
+          "success",
           isCreate
-            ? "Unable to create record."
-            : "Unable to save record."
-        )
-      );
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    serviceId,
-    id,
-    isCreate,
-    service,
-    record,
-    navigate,
-    showNotification,
-  ]);
+            ? `${service.title} created successfully.`
+            : `${service.title} saved successfully.`
+        );
+
+        if (
+          isCreate &&
+          savedRecord?.id !== undefined
+        ) {
+          navigate(
+            `/services/${serviceId}/${encodeURIComponent(
+              savedRecord.id
+            )}`
+          );
+        } else if (isCreate) {
+          navigate(`/services/${serviceId}`);
+        } else {
+          navigate(
+            `/services/${serviceId}/${id}`
+          );
+        }
+      } catch (err) {
+        console.error(
+          "Unable to save record:",
+          err
+        );
+
+        showNotification(
+          "error",
+          getErrorMessage(
+            err,
+            isCreate
+              ? "Unable to create record."
+              : "Unable to save record."
+          )
+        );
+      } finally {
+        setSaving(false);
+      }
+    }, [
+      serviceId,
+      id,
+      isCreate,
+      service,
+      record,
+      productSchema,
+      navigate,
+      showNotification,
+    ]);
 
   // ------------------------------------
   // Navigation helpers
@@ -281,18 +406,16 @@ function useServicePage(mode) {
   // ------------------------------------
 
   return {
-    // Route information
     serviceId,
     id,
     navigate,
-
-    // Service data
+    productSchema,
     service,
     record,
+    attributeDefinitions,
     rows,
     filteredRows,
 
-    // Page state
     loading,
     saving,
     error,
@@ -300,25 +423,21 @@ function useServicePage(mode) {
     activeTab,
     notification,
 
-    // Page mode
     isList,
     isCreate,
     isEdit,
     isView,
     isReadOnly,
 
-    // Derived values
     listFields,
     formFields,
     formContext,
     pageTitle,
 
-    // State setters
     setRecord,
     setSearchText,
     setActiveTab,
 
-    // Actions
     loadPage,
     handleFieldChange,
     handleSave,
