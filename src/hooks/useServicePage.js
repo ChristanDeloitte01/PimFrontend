@@ -82,10 +82,43 @@ function useServicePage(mode) {
     [service]
   );
 
-  const formFields = useMemo(
-    () => getFieldsFor(service?.fields, formContext),
-    [service, formContext]
-  );
+  const formFields = useMemo(() => {
+      const fields = getFieldsFor(
+        service?.fields,
+        formContext
+      );
+
+      if (serviceId !== "products") {
+        return fields;
+      }
+
+      return fields.map((field) => {
+        if (field.type !== "select") {
+          return field;
+        }
+
+        const attributeDefinition =
+          attributeDefinitions.find(
+            (attribute) =>
+              attribute.code === field.name
+          );
+
+        if (!attributeDefinition) {
+          return field;
+        }
+
+        return {
+          ...field,
+          options:
+            attributeDefinition.options ?? [],
+        };
+      });
+    }, [
+      service,
+      formContext,
+      serviceId,
+      attributeDefinitions,
+    ]);
 
   const pageTitle = isList
     ? service?.title
@@ -170,6 +203,11 @@ function useServicePage(mode) {
               attributeResponse?.data ||
               [];
 
+        console.log(
+          "PRODUCT ATTRIBUTE DEFINITIONS:",
+          definitions
+        );
+
         setAttributeDefinitions(
           definitions
         );
@@ -190,22 +228,28 @@ function useServicePage(mode) {
     }
 
     if (isList) {
-  const response = await executeServiceOperation(
-    serviceId,
-    "list"
-  );
+      const response = await executeServiceOperation(
+        serviceId,
+        "list"
+      );
+      const items = extractListItems(response);
 
-  setRows(extractListItems(response));
-} else if (isCreate) {
-  setRecord(makeEmptyRecord(currentService.fields));
-} else {
-  const response = await executeServiceOperation(
-          serviceId,
-          "detail",
-          {
-            params: { id },
-          }
-        );
+      setRows(items);
+    } else if (isCreate) {
+      setRecord(makeEmptyRecord(currentService.fields));
+    } else {
+        const detailParams =
+            serviceId === "attributes"
+              ? { code: id }
+              : { id };
+
+          const response = await executeServiceOperation(
+            serviceId,
+            "detail",
+            {
+              params: detailParams,
+            }
+);
 
         setRecord(
           serviceId === "products"
@@ -335,7 +379,10 @@ function useServicePage(mode) {
               serviceId,
               "update",
               {
-                params: { id },
+                params:
+                  serviceId === "attributes"
+                    ? { code: id }
+                    : { id },
                 data: payload,
               }
             );

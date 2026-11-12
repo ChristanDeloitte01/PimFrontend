@@ -68,11 +68,24 @@ export const setAttributeValue = (
     },
   };
 
+  // Dedicated product fields have a flat representation
+  // used by the Overview tab.
+  const dedicatedFieldMap = {
+    short_description: "shortDescription",
+    description: "description",
+    price: "price",
+    cost: "cost",
+    sku: "sku",
+    name: "name",
+  };
+
   if (scope === "common") {
     nextRecord.attributes.common = {
       ...(nextRecord.attributes.common ?? {}),
       [attribute.code]: value,
     };
+
+    nextRecord[attribute.code] = value;
   }
 
   if (scope === "channel_specific") {
@@ -83,6 +96,11 @@ export const setAttributeValue = (
         [attribute.code]: value,
       },
     };
+
+    if (dedicatedFieldMap[attribute.code]) {
+      nextRecord[dedicatedFieldMap[attribute.code]] =
+        value;
+    }
   }
 
   if (scope === "channel_locale_specific") {
@@ -96,6 +114,11 @@ export const setAttributeValue = (
         },
       },
     };
+
+    if (dedicatedFieldMap[attribute.code]) {
+      nextRecord[dedicatedFieldMap[attribute.code]] =
+        value;
+    }
   }
 
   return nextRecord;

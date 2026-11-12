@@ -23,15 +23,23 @@ import {
 function ServiceAttributesTab({
   record,
   productSchema,
+  attributeDefinitions,
   isReadOnly,
   setRecord,
 }) {
   const [errors, setErrors] = useState({});
 
   const attributes = useMemo(
-    () => productSchema?.attributes ?? [],
-    [productSchema]
-  );
+  () => productSchema?.attributes ?? [],
+  [productSchema]
+);
+
+console.log(
+  "PRODUCT SCHEMA BRAND:",
+  attributes.find(
+    (attribute) => attribute.code === "brand"
+  )
+);
 
   const requiredAttributes = useMemo(
     () =>
@@ -174,30 +182,38 @@ function ServiceAttributesTab({
               </MenuItem>
             )}
 
-            {(attribute.options ?? []).map(
-              (option) => {
-                const optionCode =
-                  typeof option === "string"
-                    ? option
-                    : option.code;
+            {(attribute.options ?? []).map((option) => {
+              const optionCode =
+                typeof option === "string"
+                  ? option
+                  : option.code;
 
-                const optionLabel =
-                  typeof option === "string"
-                    ? option
-                    : option.label ||
-                      option.labels?.en_US ||
-                      option.code;
+              const definition = attributeDefinitions?.find(
+                (item) => item.code === attribute.code
+              );
 
-                return (
-                  <MenuItem
-                    key={optionCode}
-                    value={optionCode}
-                  >
-                    {optionLabel}
-                  </MenuItem>
-                );
-              }
-            )}
+              const definitionOption = definition?.options?.find(
+                (item) =>
+                  (typeof item === "string" ? item : item.code) === optionCode
+              );
+
+              const optionLabel =
+                typeof definitionOption === "string"
+                  ? definitionOption
+                  : definitionOption?.label ||
+                    definitionOption?.labels?.en_US ||
+                    (typeof option === "string" ? option : option.label) ||
+                    optionCode;
+
+              return (
+                <MenuItem
+                  key={optionCode}
+                  value={optionCode}
+                >
+                  {optionLabel}
+                </MenuItem>
+              );
+            })}
           </Select>
 
           {error && (

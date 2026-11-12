@@ -71,8 +71,13 @@ function ServiceTable({
                 hover
                 onClick={() => {
                   if (service.capabilities?.view) {
+                    const recordId =
+                      serviceId === "attributes"
+                        ? row.code
+                        : row.sku;
+
                     navigate(
-                      `/services/${serviceId}/${row.sku}`
+                      `/services/${serviceId}/${recordId}`
                     );
                   }
                 }}
@@ -82,14 +87,22 @@ function ServiceTable({
                     : "default",
                 }}
               >
-                {fields.map((field) => (
-                  <TableCell key={field.name}>
-                    {row[field.name] === null ||
-                    row[field.name] === undefined
-                      ? "—"
-                      : String(row[field.name])}
-                  </TableCell>
-                ))}
+                {fields.map((field) => {
+                      const fieldValue =
+                        serviceId === "products"
+                          ? row[field.name] ??
+                            row.attributes?.common?.[field.name]
+                          : row[field.name];
+
+                      return (
+                        <TableCell key={field.name}>
+                          {fieldValue === null ||
+                          fieldValue === undefined
+                            ? "—"
+                            : String(fieldValue)}
+                        </TableCell>
+                      );
+                    })}
               </TableRow>
             ))
           )}

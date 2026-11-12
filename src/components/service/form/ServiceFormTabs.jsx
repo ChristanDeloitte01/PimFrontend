@@ -1,7 +1,6 @@
-
 import { Tabs, Tab } from "@mui/material";
 
-const tabs = [
+const productTabs = [
   { value: "overview", label: "Overview" },
   { value: "attributes", label: "Attributes" },
   { value: "media", label: "Media" },
@@ -10,7 +9,21 @@ const tabs = [
   { value: "history", label: "History" },
 ];
 
-function ServiceFormTabs({ activeTab, onChange }) {
+const attributeTabs = [
+  { value: "basic", label: "Basic Information" },
+  { value: "groups", label: "Attribute Groups" },
+];
+
+function ServiceFormTabs({
+  serviceId,
+  activeTab,
+  onChange,
+}) {
+  const tabs =
+    serviceId === "attributes"
+      ? attributeTabs
+      : productTabs;
+
   return (
     <Tabs
       value={activeTab}

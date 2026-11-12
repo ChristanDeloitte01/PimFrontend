@@ -56,6 +56,7 @@ function ServiceForm({
       />
 
       <ServiceFormTabs
+        serviceId={serviceId}
         activeTab={activeTab}
         onChange={setActiveTab}
       />
